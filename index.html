@@ -48,107 +48,22 @@
       color: #38bdf8;
     }
 
-    /* ===== Meta Buy processing-button animation (courier/truck/road) =====
-       Scoped strictly to #btn-submit-meta-buy so no other button/page is affected.
-       All horizontal sizing/travel is done with % / clamp() of the button's own
-       width (never a fixed px position or a fixed px travel distance), so the
-       truck can never end up bigger than the button or clipped mid-animation
-       on any screen size — from ~320px mobile buttons up to desktop. */
-    #btn-submit-meta-buy { position: relative; overflow: hidden; }
-    #btn-submit-meta-buy .mb-text-default,
-    #btn-submit-meta-buy .mb-text-success {
-      display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+    /* ===== Meta Buy button: lightweight spinner / checkmark (replaces the old truck animation) =====
+       Only #btn-submit-meta-buy is affected. One tiny CSS-only rotation = minimal CPU. */
+    #btn-submit-meta-buy .mb-state { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+    #btn-submit-meta-buy .mb-state-loading, #btn-submit-meta-buy .mb-state-done { display: none; }
+    #btn-submit-meta-buy.mb-loading .mb-state-default, #btn-submit-meta-buy.mb-done .mb-state-default { display: none; }
+    #btn-submit-meta-buy.mb-loading .mb-state-loading { display: flex; }
+    #btn-submit-meta-buy.mb-done .mb-state-done { display: flex; color: #eafff3; }
+    #btn-submit-meta-buy:disabled { cursor: wait; opacity: 0.9; }
+    #btn-submit-meta-buy.mb-done { border-color: #22c55e; }
+    .mb-spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2.5px solid rgba(255,255,255,0.28); border-top-color: #fff;
+      animation: mbSpin 0.7s linear infinite;
     }
-    #btn-submit-meta-buy .mb-text-success { display: none; color: #eafff3; }
-    #btn-submit-meta-buy .mb-text-success svg { filter: drop-shadow(0 0 8px rgba(74,222,128,0.7)); }
-    #btn-submit-meta-buy .mb-delivery-scene {
-      display: none; position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
-    }
-    #btn-submit-meta-buy .mb-road-track {
-      position: absolute; left: 5%; right: 5%; bottom: 20%; height: 2.5px;
-      background: rgba(5,8,22,0.65); border-radius: 4px; overflow: hidden;
-    }
-    #btn-submit-meta-buy .mb-road-stripes {
-      position: absolute; inset: 0;
-      background: repeating-linear-gradient(90deg, #38bdf8 0, #38bdf8 9%, transparent 9%, transparent 18%);
-      opacity: 0.5;
-    }
-    /* Courier: capped small so it always sits fully inside the button */
-    #btn-submit-meta-buy .mb-courier {
-      position: absolute; top: 50%; left: 2%; z-index: 4;
-      width: clamp(24px, 11%, 32px); height: auto; aspect-ratio: 54 / 56;
-      transform: translate3d(0,-50%,0);
-      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
-    }
-    /* Truck: a single "unit" wrapper carries the courier-relative-sized SVG
-       plus its headlight glow together, so they always move as one piece and
-       the truck can never render partially/independently clipped. */
-    #btn-submit-meta-buy .mb-truck-unit {
-      position: absolute; top: 50%; left: 34%; z-index: 3;
-      width: clamp(58px, 27%, 84px);
-      transform: translate3d(0,-50%,0);
-    }
-    #btn-submit-meta-buy .mb-truck-svg {
-      display: block; width: 100%; height: auto; aspect-ratio: 125 / 54;
-      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55));
-    }
-    #btn-submit-meta-buy .mb-headlight {
-      position: absolute; right: -26%; top: 26%; width: 42%; height: 38%;
-      background: radial-gradient(ellipse at left, rgba(253,224,71,0.8) 0%, rgba(253,224,71,0) 75%);
-      opacity: 0; pointer-events: none;
-    }
-    #btn-submit-meta-buy.mb-anim-active .mb-text-default { display: none !important; }
-    #btn-submit-meta-buy.mb-anim-active .mb-text-success { display: none !important; }
-    #btn-submit-meta-buy.mb-anim-active .mb-delivery-scene {
-      display: block !important; animation: mbSceneIn 0.25s ease-out both;
-    }
-    #btn-submit-meta-buy.mb-anim-active { cursor: default; }
-    #btn-submit-meta-buy.mb-anim-active .mb-road-stripes { animation: mbRoadSlide 0.5s linear infinite; }
-    #btn-submit-meta-buy.mb-anim-active .mb-wheel { animation: mbSpinWheel 0.4s linear infinite; transform-origin: center; transform-box: fill-box; }
-    #btn-submit-meta-buy.mb-anim-active .mb-courier { animation: mbCourierWalk 1.4s cubic-bezier(0.4,0,0.2,1) 0.15s forwards; }
-    #btn-submit-meta-buy.mb-anim-active .mb-truck-unit { animation: mbTruckDepart 2.6s cubic-bezier(0.65,0,0.35,1) forwards; }
-    #btn-submit-meta-buy.mb-anim-active .mb-headlight { animation: mbHeadlightOn 2.6s forwards; }
-    #btn-submit-meta-buy.mb-completed { border-color: #22c55e !important; }
-    #btn-submit-meta-buy.mb-completed .mb-text-default { display: none !important; }
-    #btn-submit-meta-buy.mb-completed .mb-delivery-scene { display: none !important; }
-    #btn-submit-meta-buy.mb-completed .mb-text-success { display: flex !important; animation: mbPopIn 0.35s cubic-bezier(0.18,0.89,0.32,1.28) forwards; }
-
-    /* Stage 1: scene fades/scales in immediately, no jump. */
-    @keyframes mbSceneIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
-
-    /* Stage 2-3: courier walks in and reaches the truck for a clear handoff,
-       then shrinks/fades as if loaded aboard — travel distance is expressed
-       as a multiple of the courier's OWN width (a % transform is always
-       relative to the element's own box), so it lands at the truck door
-       proportionally on any button width. */
-    @keyframes mbCourierWalk {
-      0%   { transform: translate3d(0,-50%,0) scale(1);         opacity: 1; }
-      60%  { transform: translate3d(260%,-50%,0) scale(1);      opacity: 1; }
-      82%  { transform: translate3d(300%,-50%,0) scale(0.55);   opacity: 0.65; }
-      100% { transform: translate3d(300%,-50%,0) scale(0);      opacity: 0; }
-    }
-
-    /* Stage 4-5: truck stays fully parked and visible while the handoff
-       happens, gives a small engine-start vibration, then eases into a
-       smooth accelerating departure. The exit distance (300% of the truck's
-       own width) reliably clears the button on every size because the
-       truck's width itself is clamped to the button width. */
-    @keyframes mbTruckDepart {
-      0%, 44%  { transform: translate3d(0,-50%,0); }
-      52%      { transform: translate3d(-1.5%,-50%,0); }
-      60%      { transform: translate3d(1%,-50%,0); }
-      70%      { transform: translate3d(6%,-50%,0); }
-      100%     { transform: translate3d(300%,-50%,0); }
-    }
-    @keyframes mbHeadlightOn { 0%, 50% { opacity: 0; } 60%, 100% { opacity: 1; } }
-    @keyframes mbSpinWheel { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    @keyframes mbRoadSlide { from { transform: translateX(0); } to { transform: translateX(-18%); } }
-    @keyframes mbPopIn { 0% { opacity: 0; transform: scale(0.85); } 100% { opacity: 1; transform: scale(1); } }
-    @media (prefers-reduced-motion: reduce) {
-      #btn-submit-meta-buy .mb-courier, #btn-submit-meta-buy .mb-truck-unit,
-      #btn-submit-meta-buy .mb-wheel, #btn-submit-meta-buy .mb-road-stripes,
-      #btn-submit-meta-buy .mb-headlight, #btn-submit-meta-buy .mb-delivery-scene { animation: none !important; }
-    }
+    @keyframes mbSpin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .mb-spinner { animation-duration: 1.6s; } }
   </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between selection:bg-indigo-600 selection:text-white">
@@ -501,33 +416,11 @@
         </div>
 
         <button id="btn-submit-meta-buy" onclick="executeMetaPurchase()" class="w-full bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-700 hover:brightness-110 text-white font-black py-3.5 rounded-xl shadow-lg active:scale-[0.99] transition">
-          <span class="mb-text-default" data-i18n="btn_buy_now">BUY NOW</span>
-          <span class="mb-delivery-scene" aria-hidden="true">
-            <span class="mb-road-track"><span class="mb-road-stripes"></span></span>
-            <svg class="mb-courier" viewBox="0 0 54 56" preserveAspectRatio="xMidYMid meet" fill="none">
-              <path d="M14 10C14 7.24 16.24 5 19 5H24C26.76 5 29 7.24 29 10H14Z" fill="#0284c7"/>
-              <circle cx="21" cy="13" r="5" fill="#fcd34d"/>
-              <path d="M15 19C15 17.9 15.9 17 17 17H26C27.1 17 28 17.9 28 19L27 34H16L15 19Z" fill="#0ea5e9"/>
-              <line x1="18" y1="34" x2="16" y2="48" stroke="#334155" stroke-width="3.5" stroke-linecap="round"/>
-              <line x1="24" y1="34" x2="26" y2="48" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round"/>
-              <g transform="translate(25, 18)"><rect width="18" height="17" rx="2" fill="#d97706" stroke="#b45309"/><line x1="9" y1="0" x2="9" y2="17" stroke="#fde68a" stroke-width="2.5" opacity="0.9"/></g>
-            </svg>
-            <span class="mb-truck-unit">
-              <svg class="mb-truck-svg" viewBox="0 0 125 54" preserveAspectRatio="xMidYMid meet" fill="none">
-                <rect x="2" y="6" width="75" height="34" rx="4" fill="#1e293b" stroke="#38bdf8" stroke-width="1.8"/>
-                <path d="M12 16L32 16" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
-                <path d="M77 12H98C103 12 107 16 110 20L118 28C119 29 120 31 120 33V40H77V12Z" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5"/>
-                <path d="M80 15H96L107 27H80V15Z" fill="#e0f2fe" opacity="0.95"/>
-                <circle cx="119" cy="30" r="3" fill="#fde047" stroke="#ca8a04" stroke-width="1"/>
-                <g transform="translate(24, 40)"><circle r="8" fill="#090d16" stroke="#475569" stroke-width="2.5"/><g class="mb-wheel"><circle r="4" fill="#38bdf8"/></g></g>
-                <g transform="translate(98, 40)"><circle r="8" fill="#090d16" stroke="#475569" stroke-width="2.5"/><g class="mb-wheel"><circle r="4" fill="#38bdf8"/></g></g>
-              </svg>
-              <span class="mb-headlight"></span>
-            </span>
-          </span>
-          <span class="mb-text-success">
+          <span class="mb-state mb-state-default" data-i18n="btn_buy_now">BUY NOW</span>
+          <span class="mb-state mb-state-loading" aria-live="polite"><span class="mb-spinner" aria-hidden="true"></span><span>Confirming...</span></span>
+          <span class="mb-state mb-state-done">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-            <span>ORDER PLACED!</span>
+            <span>ORDER CONFIRMED</span>
           </span>
         </button>
       </div>
@@ -538,8 +431,8 @@
       <div class="w-16 h-16 bg-cyan-500/20 text-cyan-400 rounded-full flex items-center justify-center mx-auto text-3xl border border-cyan-400/40 shadow-lg">
         <i class="fa-solid fa-boxes-packing"></i>
       </div>
-      <h2 class="text-2xl font-black text-white" data-i18n="meta_success_title">Order Placed Successfully!</h2>
-      <p class="text-xs text-indigo-200 max-w-xs mx-auto">Your purchased accounts file will be sent directly through the Telegram bot.</p>
+      <h2 class="text-2xl font-black text-white" data-i18n="meta_success_title">Order Confirmed!</h2>
+      <p class="text-xs text-indigo-200 max-w-xs mx-auto">Your order is confirmed. One file with all your accounts is being delivered to your Telegram chat — you can keep using the app meanwhile.</p>
       
       <div onclick="copyMetaOrderId()" class="glass-card hover:border-cyan-400 p-4 rounded-2xl max-w-xs mx-auto shadow-md cursor-pointer transition active:scale-95 group">
         <p class="text-[11px] text-indigo-200" data-i18n="label_meta_order_id">Meta Order ID:</p>
@@ -1330,7 +1223,9 @@
     ];
     let allOrdersData = JSON.parse(localStorage.getItem('cache_ordersData')) || {};
     let allDepositsData = {};
-    let allMetaOrdersData = {};
+    let allMetaOrdersData = {};      // ADMIN ONLY (loaded after the admin password is accepted)
+    let myMetaOrdersData = {};       // customer: ONLY this user's orders (metaBuyOrdersByUser/{id})
+    const metaSummaryRefs = {};      // productId -> attached metaStockSummary listener
 
     let currentSelectedCoin = null;
     let currentCoinMin = 1;
@@ -1340,9 +1235,7 @@
     let currentSelectedMetaProduct = null;
     let currentMetaIdempotencyKey = null;
     let metaPurchaseInFlight = false;
-    let metaStockAvailability = {}; // { [productId]: liveAvailableCount } — real metaStock counts
-    let metaStockRaw = {}; // last raw snapshot of metaStock/{productId}/{itemId}, cached so it can be
-                            // recomputed whenever metaBuyOrders changes too (see computeMetaStockAvailability)
+    let metaStockAvailability = {}; // { [productId]: availableCount } — from the backend / metaStockSummary (never from account records)
     let currentSelectedDepositMethod = null;
     let admSelectedUserObj = null;
     let admBalanceActionType = 'ADD';
@@ -1374,7 +1267,7 @@
         label_select_deposit_method: "Select Deposit Method", send_money_to: "Send Money To:", label_deposit_amount: "Deposit Amount (BDT)",
         label_trx_id: "Transaction ID (TrxID / TxID)", btn_confirm_deposit: "Confirm Deposit", deposit_success_title: "Deposit Submitted!",
         label_deposit_id: "Your Deposit ID:", deposit_history_heading: "Deposit History", meta_store_heading: "Meta Buy Store",
-        label_how_many_accounts: "How many accounts do you want?", btn_buy_now: "BUY NOW", meta_success_title: "Order Placed Successfully!",
+        label_how_many_accounts: "How many accounts do you want?", btn_buy_now: "BUY NOW", meta_success_title: "Order Confirmed!",
         label_meta_order_id: "Meta Order ID:", meta_history_heading: "Meta Buy History", stock_count: "Stock:",
         label_subtotal: "Subtotal:", label_service_charge: "Service Charge:", label_total_payable: "Total Payable:"
       },
@@ -1403,7 +1296,7 @@
         label_select_deposit_method: "ডিপোজিট মেথড সিলেক্ট করুন", send_money_to: "টাকা পাঠানোর নাম্বার / আইডি:", label_deposit_amount: "ডিপোজিট পরিমাণ (BDT)",
         label_trx_id: "ট্রানজেকশন আইডি (TrxID / TxID)", btn_confirm_deposit: "ডিপোজিট কনফার্ম করুন", deposit_success_title: "ডিপোজিট জমা হয়েছে!",
         label_deposit_id: "আপনার ডিপোজিট আইডি:", deposit_history_heading: "ডিপোজিট হিস্ট্রি", meta_store_heading: "মেটা বাই স্টোর",
-        label_how_many_accounts: "কতটি একাউন্ট নিতে চান?", btn_buy_now: "এখনই ক্রয় করুন", meta_success_title: "অর্ডার সফল হয়েছে!",
+        label_how_many_accounts: "কতটি একাউন্ট নিতে চান?", btn_buy_now: "এখনই ক্রয় করুন", meta_success_title: "অর্ডার নিশ্চিত হয়েছে!",
         label_meta_order_id: "মেটা অর্ডার আইডি:", meta_history_heading: "মেটা বাই হিস্ট্রি", stock_count: "স্টক:",
         label_subtotal: "সাবটোটাল:", label_service_charge: "সার্ভিস চার্জ:", label_total_payable: "মোট প্রদেয়:"
       }
@@ -1620,49 +1513,18 @@
         }
         renderMetaProducts();
         renderAdmMetaProducts();
+        attachMetaSummaryListeners();
       });
 
-      // Meta Stock Listener — computes the REAL available-item count per
-      // product from metaStock/{productId}/{itemId}.status, so the storefront
-      // shows the same number the backend's /meta-buy will actually honor,
-      // instead of the product's manually-typed "stock" display field.
-      //
-      // A raw item being marked "RESERVED" does NOT necessarily mean the
-      // backend still considers it unavailable: the backend (/meta-buy)
-      // only ever keeps a RESERVED item off-limits while it is traceable to
-      // a genuinely active order (PROCESSING / PENDING / NEEDS_MANUAL_REVIEW).
-      // The moment a reservation's order is missing or already terminal
-      // (DELIVERED / DELIVERY_FAILED / REJECTED / CANCELLED), the backend
-      // treats that account as usable again the next time stock is needed.
-      // So the website counts it the same way here — using the existing
-      // metaBuyOrders data it already listens to below — instead of trusting
-      // the raw "AVAILABLE" item count alone, which can lag behind reality
-      // whenever a batch of reservations is sitting on stale/orphaned orders.
-      // This mirrors the backend's own decision logic; it does not invent a
-      // second, competing stock authority.
-      db.ref('metaStock').on('value', snapshot => {
-        metaStockRaw = snapshot.val() || {};
-        refreshMetaStockAvailability();
-      });
+      // Stock: the browser NEVER listens to metaStock (account credentials). Counts come from the
+      // backend (/meta-products) and the tiny metaStockSummary/{productId} nodes (see attachMetaSummaryListeners).
+      fetchMetaProductsFromApi();
 
-      // Deposits Listener
-      db.ref('deposits').on('value', snapshot => {
-        allDepositsData = snapshot.val() || {};
-        renderDepositHistory();
-        renderAdmDepositRequests();
-      });
-
-      // Meta Orders Listener
-      db.ref('metaBuyOrders').on('value', snapshot => {
-        allMetaOrdersData = snapshot.val() || {};
+      // Meta history: ONLY this user's compact index, never the global metaBuyOrders tree.
+      db.ref('metaBuyOrdersByUser/' + tgUser.id).on('value', snapshot => {
+        myMetaOrdersData = snapshot.val() || {};
         renderMetaHistory();
-        renderAdmMetaOrders();
         updateWalletUi();
-        // An order transitioning to/from an active status (e.g. a stuck
-        // PROCESSING order finally being marked DELIVERED/REJECTED) changes
-        // which RESERVED stock items now count as genuinely available —
-        // recompute the storefront's stock display to match.
-        refreshMetaStockAvailability();
       });
 
       // Coins Listener
@@ -1748,8 +1610,7 @@
       });
       document.getElementById('wallet-stat-coin-sold').innerText = '৳ ' + totalCoinSold.toFixed(2);
 
-      const myMetaOrders = Object.values(allMetaOrdersData).filter(o => String(o.userId) === String(tgUser.id));
-      document.getElementById('stat-total-meta').innerText = myMetaOrders.length;
+      document.getElementById('stat-total-meta').innerText = Object.keys(myMetaOrdersData || {}).length;
     }
 
     function setupProfileData() {
@@ -1779,6 +1640,8 @@
       if (view === 'profile') setupProfileData();
       if (view === 'wallet') updateWalletUi();
       if (view === 'meta-history') renderMetaHistory();
+      if (view === 'meta-buy') fetchMetaProductsFromApi();
+      if (view === 'deposit-history') loadMyDeposits();
       window.scrollTo(0, 0);
       closeMenu();
     }
@@ -1827,6 +1690,7 @@
       const entered = document.getElementById('admin-auth-input').value.trim();
       if (entered === FIXED_ADMIN_PASS || entered === demoAdminPass) {
         closeAdminAuthModal();
+        attachAdminListeners();
         navigate('admin');
       } else {
         alert("Incorrect Password!");
@@ -1943,47 +1807,20 @@
     // META BUY STORE & PURCHASE (PURE ENGLISH & PLUS CHARGE)
     // ==========================================
 
-    // Same "active order" rule the backend (/meta-buy) uses to decide
-    // whether a RESERVED stock item is still genuinely off-limits. Kept in
-    // sync with the worker's ACTIVE_ORDER_STATUSES set.
-    const META_ACTIVE_ORDER_STATUSES = new Set(['PROCESSING', 'PENDING', 'NEEDS_MANUAL_REVIEW']);
-
-    // Computes, per product, the count of stock items the backend would
-    // currently treat as purchasable: items already AVAILABLE, plus RESERVED
-    // items whose reservation is stale/orphaned (order missing, or already
-    // terminal) rather than tied to a genuinely active order. This is a
-    // read-only mirror of the backend's own reconciliation rule — it never
-    // writes to the database and never overrides a real insufficient_stock
-    // response from /meta-buy, it only makes the displayed number agree
-    // with what the backend already considers real, purchasable stock.
-    function computeMetaStockAvailability() {
-      const counts = {};
-      Object.keys(metaStockRaw || {}).forEach(productId => {
-        const items = metaStockRaw[productId] || {};
-        let available = 0;
-        Object.values(items).forEach(it => {
-          if (!it) return;
-          if (it.status === 'AVAILABLE') {
-            available++;
-          } else if (it.status === 'RESERVED') {
-            const orderId = it.orderId || '';
-            const order = orderId ? (allMetaOrdersData || {})[orderId] : null;
-            const isActive = !!order && META_ACTIVE_ORDER_STATUSES.has(order.status);
-            if (!isActive) available++; // stale/orphaned reservation — backend would free it too
-          }
-        });
-        counts[productId] = available;
-      });
-      return counts;
+    // ---- Meta stock: lightweight, credential-free ----
+    let metaRenderTimer = null;
+    function scheduleMetaStockRender() {
+      if (metaRenderTimer) return;
+      metaRenderTimer = setTimeout(() => {
+        metaRenderTimer = null;
+        refreshMetaStockAvailability();
+      }, 120); // debounce: many summary updates -> one render
     }
 
-    // Recomputes metaStockAvailability and refreshes every UI element that
-    // displays it (store list, open purchase screen's badge + validation).
-    // Called whenever either metaStock or metaBuyOrders changes, since both
-    // feed into the computation above.
+    // Updates every UI element that shows stock (store list, open purchase screen badge + validation).
     function refreshMetaStockAvailability() {
-      metaStockAvailability = computeMetaStockAvailability();
       renderMetaProducts();
+      renderAdmMetaProducts();
       if (currentSelectedMetaProduct && metaStockAvailability[currentSelectedMetaProduct.id] !== undefined) {
         currentSelectedMetaProduct.stock = metaStockAvailability[currentSelectedMetaProduct.id];
         const badge = document.getElementById('meta-purchase-stock-badge');
@@ -1992,21 +1829,81 @@
       }
     }
 
+    // Authoritative real stock from the backend (it also builds the summary on first use).
+    let metaProductsFetchedAt = 0;
+    async function fetchMetaProductsFromApi(force) {
+      if (!force && Date.now() - metaProductsFetchedAt < 4000) return;
+      metaProductsFetchedAt = Date.now();
+      try {
+        const res = await fetch(`${META_BUY_API_BASE}/meta-products`);
+        const json = await res.json();
+        if (json && json.ok && Array.isArray(json.data)) {
+          json.data.forEach(p => {
+            if (p && p.id && typeof p.availableStock === 'number') metaStockAvailability[p.id] = p.availableStock;
+          });
+          scheduleMetaStockRender();
+        }
+      } catch (e) { /* keep showing the last known numbers */ }
+    }
+
+    // Realtime stock: one tiny node per product (4 numbers) — not the inventory.
+    function attachMetaSummaryListeners() {
+      Object.keys(metaProductsData || {}).forEach(id => {
+        if (metaSummaryRefs[id]) return;
+        metaSummaryRefs[id] = true;
+        db.ref('metaStockSummary/' + id).on('value', snap => {
+          const v = snap.val();
+          if (v && typeof v.availableCount === 'number') {
+            metaStockAvailability[id] = Math.max(0, v.availableCount);
+            scheduleMetaStockRender();
+          }
+        });
+      });
+    }
+
+    // Deposit history is loaded per user on demand (Deposit workflow itself is unchanged).
+    async function loadMyDeposits() {
+      try {
+        const res = await fetch(`${META_BUY_API_BASE}/deposit-history?user_id=${encodeURIComponent(tgUser.id)}`);
+        const json = await res.json();
+        if (json && json.ok && Array.isArray(json.data)) {
+          json.data.forEach(d => { if (d && d.id) allDepositsData[d.id] = d; });
+          renderDepositHistory();
+        }
+      } catch (e) { /* offline: show what we have */ }
+    }
+
+    // Admin-only full listeners — attached only after the admin password is accepted.
+    let adminListenersAttached = false;
+    function attachAdminListeners() {
+      if (adminListenersAttached) return;
+      adminListenersAttached = true;
+      db.ref('deposits').on('value', snapshot => {
+        allDepositsData = snapshot.val() || {};
+        renderDepositHistory();
+        renderAdmDepositRequests();
+      });
+      db.ref('metaBuyOrders').on('value', snapshot => {
+        allMetaOrdersData = snapshot.val() || {};
+        renderAdmMetaOrders();
+      });
+    }
+
     function renderMetaProducts() {
       const el = document.getElementById('meta-products-list');
-      el.innerHTML = '';
       const entries = Object.entries(metaProductsData || {}).filter(([, p]) => p && p.active !== false);
       if (!entries.length) {
         el.innerHTML = `<p class="text-xs text-indigo-300/60 text-center py-5">No Meta products configured yet.</p>`;
         return;
       }
+      let html = '';
       entries.forEach(([id, prod]) => {
-        const liveStock = metaStockAvailability[id];
-        const stockDisplay = (liveStock !== undefined) ? liveStock : (prod.stock ?? '—');
-        el.innerHTML += `
+        const live = metaStockAvailability[id];
+        const stockDisplay = (live !== undefined) ? live : '…';
+        html += `
           <div class="glass-card rounded-2xl p-4 flex items-center justify-between shadow-lg hover:border-cyan-400/50 transition">
             <div class="flex items-center gap-3">
-              <img src="${prod.logo}" onerror="this.onerror=null; this.src='https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(prod.name)}'" class="w-12 h-12 rounded-xl object-cover border border-cyan-400/40 bg-[#090e24]">
+              <img src="${prod.logo}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(prod.name)}'" class="w-12 h-12 rounded-xl object-cover border border-cyan-400/40 bg-[#090e24]">
               <div>
                 <h4 class="text-sm font-bold text-white">${prod.name}</h4>
                 <p class="text-xs text-cyan-300 font-bold font-mono">৳${prod.unitPrice} <span class="text-[10px] text-indigo-200 font-normal">/ Account</span></p>
@@ -2017,13 +1914,16 @@
           </div>
         `;
       });
+      el.innerHTML = html;
     }
 
     function openMetaPurchase(prodId) {
       const prod = metaProductsData[prodId];
       if (!prod) return;
       const liveStock = metaStockAvailability[prodId];
-      currentSelectedMetaProduct = { ...prod, id: prodId, stock: (liveStock !== undefined ? liveStock : prod.stock) };
+      currentSelectedMetaProduct = { ...prod, id: prodId, stock: (liveStock !== undefined ? liveStock : 0), stockKnown: liveStock !== undefined };
+      setMetaBtnState('idle');
+      fetchMetaProductsFromApi(true);
 
       document.getElementById('meta-purchase-title').innerText = currentSelectedMetaProduct.name;
       document.getElementById('meta-purchase-logo').src = currentSelectedMetaProduct.logo;
@@ -2032,7 +1932,7 @@
       };
       document.getElementById('meta-purchase-name').innerText = currentSelectedMetaProduct.name;
       document.getElementById('meta-purchase-unit-price').innerText = `৳${currentSelectedMetaProduct.unitPrice} / Account`;
-      document.getElementById('meta-purchase-stock-badge').innerText = `Stock: ${currentSelectedMetaProduct.stock}`;
+      document.getElementById('meta-purchase-stock-badge').innerText = currentSelectedMetaProduct.stockKnown ? `Stock: ${currentSelectedMetaProduct.stock}` : 'Stock: …';
       document.getElementById('meta-purchase-desc').innerText = currentSelectedMetaProduct.desc || "Verified high quality accounts with instant delivery.";
 
       const qtyInput = document.getElementById('input-meta-qty');
@@ -2060,8 +1960,8 @@
       const stock = currentSelectedMetaProduct.stock || 0;
       const unit = currentSelectedMetaProduct.unitPrice || 0;
 
-      if (qty > stock) {
-        errElem.innerText = `Current stock (${stock}) exceeded. Order will be queued as backlog.`;
+      if (currentSelectedMetaProduct.stockKnown !== false && qty > stock) {
+        errElem.innerText = `Only ${stock} accounts are currently available.`;
         errElem.classList.remove('hidden');
       } else {
         errElem.classList.add('hidden');
@@ -2078,6 +1978,16 @@
       document.getElementById('meta-calc-final').innerText = `৳ ${finalTotal.toFixed(2)}`;
     }
 
+    // Button states: 'idle' | 'loading' | 'done'. The spinner only covers the FAST confirmation request;
+    // CSV generation / Telegram delivery happen on the server afterwards and never block the UI.
+    function setMetaBtnState(state) {
+      const btn = document.getElementById('btn-submit-meta-buy');
+      if (!btn) return;
+      btn.classList.toggle('mb-loading', state === 'loading');
+      btn.classList.toggle('mb-done', state === 'done');
+      btn.disabled = (state === 'loading');
+    }
+
     async function executeMetaPurchase() {
       if (!currentSelectedMetaProduct) return;
       if (metaPurchaseInFlight) return;
@@ -2090,9 +2000,8 @@
       const serviceCharge = getMetaServiceCharge(gross);
       const finalTotal = gross + serviceCharge;
 
-      // Frontend balance check is a convenience only — the backend re-validates
-      // wallet balance, product price, quantity and stock availability itself
-      // and is the sole authority on whether a purchase actually goes through.
+      // Frontend balance check is a convenience only — the backend re-validates wallet balance,
+      // price, quantity and stock itself and is the sole authority on the purchase.
       if (userWallet.balance < finalTotal) {
         if (confirm("Insufficient Balance in your wallet! Do you want to deposit money now?")) {
           navigate('deposit');
@@ -2104,33 +2013,31 @@
         currentMetaIdempotencyKey = "MBC-" + tgUser.id + "-" + Date.now() + "-" + Math.random().toString(36).substring(2, 10);
       }
 
-      const btn = document.getElementById('btn-submit-meta-buy');
       metaPurchaseInFlight = true;
-      btn.disabled = true;
-      btn.classList.remove('mb-completed');
-      btn.classList.add('mb-anim-active');
-      const mbAnimStart = Date.now();
-      const MB_MIN_VISIBLE_MS = 2600; // ~2.5-3s visible processing per spec
-      const mbSleep = (ms) => new Promise(r => setTimeout(r, ms));
+      setMetaBtnState('loading'); // instant feedback, button disabled
 
       try {
-        // Single authoritative call: the Cloudflare Worker backend validates the
-        // user, product, price, balance and stock, reserves the exact quantity,
-        // deducts the wallet, delivers the file server-side via Telegram, and
-        // rolls back stock/balance automatically if anything fails.
-        const res = await fetch(`${META_BUY_API_BASE}/meta-buy`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            product_id: currentSelectedMetaProduct.id,
-            quantity: qty,
-            idempotency_key: currentMetaIdempotencyKey,
-            user_id: tgUser.id,
-            username: tgUser.username || "",
-            first_name: tgUser.first_name || "User",
-            init_data: (tg && tg.initData) || ""
-          })
-        });
+        const ctrl = new AbortController();
+        const abortTimer = setTimeout(() => ctrl.abort(), 30000);
+        let res;
+        try {
+          res = await fetch(`${META_BUY_API_BASE}/meta-buy`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: ctrl.signal,
+            body: JSON.stringify({
+              product_id: currentSelectedMetaProduct.id,
+              quantity: qty,
+              idempotency_key: currentMetaIdempotencyKey,
+              user_id: tgUser.id,
+              username: tgUser.username || "",
+              first_name: tgUser.first_name || "User",
+              init_data: (tg && tg.initData) || ""
+            })
+          });
+        } finally {
+          clearTimeout(abortTimer);
+        }
 
         let result = null;
         try {
@@ -2147,12 +2054,20 @@
             invalid_product_price: "This product has an invalid price. Please contact support.",
             insufficient_balance: "Insufficient balance in your wallet. Please deposit money first.",
             insufficient_stock: "Not enough stock available right now. Please try a smaller quantity.",
-            delivery_failed: "Delivery could not be completed. Your balance has been refunded automatically. Please try again."
+            delivery_failed: "Delivery could not be completed. Your balance has been refunded automatically. Please try again.",
+            internal_error: "Something went wrong on our side. You were not charged. Please try again."
           };
           const errKey = result && result.error;
-          const message = errorMessages[errKey] || "Purchase could not be completed. Please try again.";
+          let message = errorMessages[errKey] || "Purchase could not be completed. Please try again.";
+          if (errKey === "insufficient_stock" && typeof result.available === 'number') {
+            message = `Only ${result.available} accounts are currently available.`;
+            metaStockAvailability[currentSelectedMetaProduct.id] = result.available; // show the real number
+            currentSelectedMetaProduct.stock = result.available;
+            currentSelectedMetaProduct.stockKnown = true;
+            scheduleMetaStockRender();
+          }
 
-          btn.classList.remove('mb-anim-active', 'mb-completed');
+          setMetaBtnState('idle'); // failure restores the button immediately
           if (errKey === "insufficient_balance") {
             if (confirm(message + "\n\nDo you want to deposit money now?")) {
               navigate('deposit');
@@ -2160,38 +2075,38 @@
           } else {
             alert(message);
           }
-          // Allow a fresh attempt with a new idempotency key since this request
-          // did not result in a successful order.
+          // The server released the key's claim, so a fresh attempt may use a new key.
           currentMetaIdempotencyKey = null;
           return;
         }
 
+        // ORDER CONFIRMED (stock reserved + wallet debited + order created). Delivery continues server-side.
         const orderId = result.data.id;
-        // Instant local update so Meta Buy History never waits for the Firebase sync.
         try {
-          if (!allMetaOrdersData || typeof allMetaOrdersData !== 'object') allMetaOrdersData = {};
-          allMetaOrdersData[orderId] = result.data;
-          if (allMetaOrdersData[orderId].userId == null && allMetaOrdersData[orderId].user_id == null) {
-            allMetaOrdersData[orderId].userId = tgUser.id;
-          }
+          myMetaOrdersData[orderId] = result.data; // instant local history entry; realtime index keeps it current
           renderMetaHistory();
+          if (typeof result.walletBalance === 'number') {
+            userWallet.balance = result.walletBalance;
+            updateWalletUi();
+          }
         } catch (localErr) { console.warn('Local Meta order insert failed:', localErr); }
-        const mbElapsed = Date.now() - mbAnimStart;
-        if (mbElapsed < MB_MIN_VISIBLE_MS) await mbSleep(MB_MIN_VISIBLE_MS - mbElapsed);
-        btn.classList.remove('mb-anim-active');
-        btn.classList.add('mb-completed');
-        await mbSleep(650); // brief "ORDER PLACED!" moment before handing off to the full success screen
+        setMetaBtnState('done');
         document.getElementById('success-meta-id-display').innerText = '#' + orderId;
         currentMetaIdempotencyKey = null;
         navigate('meta-success');
       } catch (err) {
-        btn.classList.remove('mb-anim-active', 'mb-completed');
-        alert("Purchase error: " + err.message);
+        setMetaBtnState('idle');
+        // The key is kept on purpose: if the request actually reached the server, retrying with the
+        // same key returns the SAME order instead of buying (and charging) twice.
+        const aborted = err && err.name === 'AbortError';
+        alert(aborted
+          ? "The connection is slow. Your order may already be confirmed — please check Meta Buy History before trying again."
+          : "Purchase error: " + err.message);
       } finally {
         metaPurchaseInFlight = false;
-        btn.disabled = false;
-        // Reset the button back to its idle BUY NOW state for the next purchase.
-        setTimeout(() => btn.classList.remove('mb-anim-active', 'mb-completed'), 800);
+        const b = document.getElementById('btn-submit-meta-buy');
+        if (b && !b.classList.contains('mb-done')) b.disabled = false;
+        if (b && b.classList.contains('mb-done')) b.disabled = false;
       }
     }
 
@@ -2285,6 +2200,7 @@
         };
 
         await db.ref('deposits/' + depositId).set(depData);
+        allDepositsData[depositId] = depData;
 
         const safeDepId = escapeHtml(depositId);
         const safeUser = escapeHtml(tgUser.username || 'N/A');
@@ -2402,13 +2318,10 @@
       const query = ((searchEl && searchEl.value) || '').toLowerCase().trim();
       el.innerHTML = '';
 
-      const myId = String((tgUser && tgUser.id) != null ? tgUser.id : '').trim();
-      let list = Object.values(allMetaOrdersData || {}).filter(m =>
-        m && typeof m === 'object' &&
-        (String(m.userId != null ? m.userId : '').trim() === myId || String(m.user_id != null ? m.user_id : '').trim() === myId)
-      );
+      // Only this user's orders (per-user index) — never the global tree.
+      let list = Object.values(myMetaOrdersData || {}).filter(m => m && typeof m === 'object');
       // Newest first; unparseable dates fall back to 0 so the sort never yields NaN.
-      const orderTs = o => { const v = new Date(o.createdAt || o.date || 0).getTime(); return isNaN(v) ? 0 : v; };
+      const orderTs = o => { if (o.createdAtMs) return Number(o.createdAtMs) || 0; const v = new Date(o.createdAt || o.date || 0).getTime(); return isNaN(v) ? 0 : v; };
       list.sort((a, b) => orderTs(b) - orderTs(a));
 
       if (query) list = list.filter(m => (m.id || '').toLowerCase().includes(query) || (m.productName || '').toLowerCase().includes(query));
@@ -2420,17 +2333,27 @@
 
       list.forEach(ord => {
         const st = String(ord.status || '').toUpperCase();
+        // Customer-facing states: DELIVERED / DELIVERY FAILED / REJECTED / CANCELLED. There is NO "Pending" for Meta Buy.
+        // An order whose delivery is still being sent by the server is simply shown as confirmed.
         let badgeColor = 'bg-cyan-500/20 text-cyan-300';
-        let statusLabel = ord.status || 'UNKNOWN';
+        let statusLabel = 'CONFIRMED';
+        let statusNote = 'Delivery in progress';
         if (st === 'DELIVERED') {
           badgeColor = 'bg-emerald-500/20 text-emerald-300';
           statusLabel = 'DELIVERED';
-        } else if (st === 'DELIVERY_FAILED' || st === 'REJECTED' || st === 'CANCELLED') {
+          statusNote = '';
+        } else if (st === 'DELIVERY_FAILED') {
           badgeColor = 'bg-rose-500/20 text-rose-300';
-          statusLabel = 'FAILED / REFUNDED';
-        } else if (st === 'PROCESSING' || st === 'PENDING' || st === 'PENDING_STOCK') {
-          badgeColor = 'bg-yellow-500/20 text-yellow-300';
-          statusLabel = 'PENDING';
+          statusLabel = 'DELIVERY FAILED';
+          statusNote = 'Refunded automatically';
+        } else if (st === 'REJECTED') {
+          badgeColor = 'bg-rose-500/20 text-rose-300';
+          statusLabel = 'REJECTED';
+          statusNote = 'Refunded';
+        } else if (st === 'CANCELLED') {
+          badgeColor = 'bg-rose-500/20 text-rose-300';
+          statusLabel = 'CANCELLED';
+          statusNote = 'Refunded';
         }
         const idText = ord.id || '—';
         const nameText = ord.productName || ord.product_name || 'Meta Accounts';
@@ -2445,6 +2368,7 @@
               <span class="text-[10px] ${badgeColor} px-2.5 py-0.5 rounded-full font-bold">${statusLabel}</span>
             </div>
             <div class="text-slate-100 font-semibold">${nameText} (${qtyText} Accounts)</div>
+            ${statusNote ? `<div class="text-[10px] text-indigo-300/70">${statusNote}</div>` : ''}
             <div class="flex justify-between items-center text-indigo-300/80 text-[11px] pt-1.5 border-t border-indigo-500/20">
               <span class="font-bold text-cyan-300">Total: ৳${totalText}</span>
               <span class="text-right">${dateText}</span>
@@ -2627,7 +2551,7 @@
         const liveStock = metaStockAvailability[id];
         const stockLabel = (liveStock !== undefined)
           ? `Real Stock: ${liveStock}`
-          : `Stock: ${p.stock ?? '—'} (no stock records uploaded yet)`;
+          : `Stock: … (loading real stock)`;
         el.innerHTML += `
           <div class="bg-[#090e24] p-3 rounded-xl border border-indigo-500/30 flex justify-between items-center text-xs">
             <div class="flex items-center gap-2">
@@ -2749,7 +2673,7 @@
               <span class="font-bold text-cyan-300">Paid: ৳${ord.total}</span>
               <span>${ord.date}</span>
             </div>
-            ${ord.status !== 'DELIVERED' ? `
+            ${['PENDING', 'NEEDS_MANUAL_REVIEW'].includes(ord.status) ? `
               <button onclick="admMarkMetaDelivered('${ord.id}')" class="w-full mt-1.5 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-400/40 py-1.5 rounded-lg text-xs font-bold">Mark as Delivered</button>
             ` : ''}
           </div>
