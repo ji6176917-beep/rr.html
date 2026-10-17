@@ -1348,6 +1348,64 @@
     if (tg) { tg.ready(); tg.expand(); }
     const tgUser = tg?.initDataUnsafe?.user || { id: "8711733087", first_name: "Admin User", username: "novair5" };
 
+    // RELIABLE ADMIN NOTIFICATION: Worker /submit-order first (3 tries), direct Telegram as backup.
+    // Always awaited, so the Mini App never navigates away while a request is still in flight.
+    async function notifyAdminsReliable({ caption, markup, photo }) {
+      const wait = (ms) => new Promise(r => setTimeout(r, ms));
+      const markupStr = typeof markup === 'string' ? markup : JSON.stringify(markup);
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 30000);
+        try {
+          const fd = new FormData();
+          fd.append('caption', caption);
+          fd.append('reply_markup', markupStr);
+          if (photo) fd.append('photo', photo, 'proof.jpg');
+          const res = await fetch(`${META_BUY_API_BASE}/submit-order`, { method: 'POST', body: fd, signal: ctrl.signal });
+          const data = await res.json().catch(() => null);
+          if (res.ok && data && data.ok) return true;
+        } catch (e) {
+        } finally {
+          clearTimeout(timer);
+        }
+        await wait(700 * (attempt + 1));
+      }
+
+      // Backup: send straight to Telegram, awaited, with one retry per admin
+      const sendDirect = async (chatId) => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            if (photo) {
+              const fd = new FormData();
+              fd.append('chat_id', chatId);
+              fd.append('photo', photo, 'proof.jpg');
+              fd.append('caption', caption);
+              fd.append('parse_mode', 'HTML');
+              fd.append('reply_markup', markupStr);
+              const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: fd });
+              const d = await r.json();
+              if (d.ok) return true;
+            }
+            const r2 = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chat_id: chatId, text: caption, parse_mode: 'HTML', reply_markup: JSON.parse(markupStr) })
+            });
+            const d2 = await r2.json();
+            if (d2.ok) return true;
+            const ra = d2.parameters && d2.parameters.retry_after;
+            if (ra) await wait(Math.min(ra, 5) * 1000);
+          } catch (e) {
+            await wait(800);
+          }
+        }
+        return false;
+      };
+      const results = await Promise.all(ADMIN_IDS.map(sendDirect));
+      return results.some(Boolean);
+    }
+
     function escapeHtml(text) {
       if (!text) return "";
       return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -2199,27 +2257,39 @@
           date: new Date().toLocaleString()
         };
 
-        // Save the deposit + a "not yet notified" marker in ONE atomic write. The bot pulls the
-        // deposit from Firebase and notifies all admins; its background sweep is the safety net.
-        let indexSaved = true;
-        try {
-          await db.ref().update({
-            ['deposits/' + depositId]: Object.assign({}, depData, { adminNotified: false }),
-            ['deposits_unnotified/' + depositId]: depData.createdAt
-          });
-        } catch (writeErr) {
-          indexSaved = false;
-          await db.ref('deposits/' + depositId).set(depData);
-        }
+        await db.ref('deposits/' + depositId).set(depData);
         allDepositsData[depositId] = depData;
 
-        const depNotified = await pingBotToPull('/notify-deposit', { deposit_id: depositId });
-        if (!depNotified && !indexSaved) {
-          try { await db.ref('deposits/' + depositId).remove(); } catch (_) {}
-          delete allDepositsData[depositId];
-          throw new Error(currentLang === 'en'
-            ? "Could not reach the server. Please check your internet and try again."
-            : "সার্ভারে যোগাযোগ করা যায়নি। ইন্টারনেট চেক করে আবার চেষ্টা করুন।");
+        const safeDepId = escapeHtml(depositId);
+        const safeUser = escapeHtml(tgUser.username || 'N/A');
+        const safeUserId = escapeHtml(tgUser.id);
+        const safeMethod = escapeHtml(currentSelectedDepositMethod.name);
+        const safeTrx = escapeHtml(trxId);
+
+        let depMsg = `💳 <b>New Deposit Request!</b>\n\n` +
+                     `🆔 <b>Deposit ID:</b> <code>#${safeDepId}</code>\n` +
+                     `👤 <b>User:</b> @${safeUser} (ID: <code>${safeUserId}</code>)\n` +
+                     `🏦 <b>Method:</b> ${safeMethod}\n` +
+                     `💰 <b>Amount:</b> ৳${amount}\n`;
+        if (isBinance) {
+          depMsg += `💵 <b>USD Equivalent:</b> $${usdVal} (Rate: ৳${usdExchangeRate})\n`;
+        }
+        depMsg += `🔖 <b>TrxID:</b> <code>${safeTrx}</code>\n` +
+                  `📅 <b>Date:</b> ${new Date().toLocaleString()}`;
+
+        const inlineKeyboard = JSON.stringify({
+          inline_keyboard: [
+            [
+              { text: "✅ Approve Deposit", callback_data: `appr_dep_${depositId}` },
+              { text: "❌ Reject", callback_data: `rej_dep_${depositId}` }
+            ]
+          ]
+        });
+
+        const depNotified = await notifyAdminsReliable({ caption: depMsg, markup: inlineKeyboard, photo: null });
+        try { await db.ref('deposits/' + depositId + '/adminNotified').set(!!depNotified); } catch (e) {}
+        if (!depNotified) {
+          alert("⚠️ আপনার ডিপোজিট (#" + depositId + ") সেভ হয়েছে, কিন্তু অ্যাডমিনকে নোটিফিকেশন পাঠানো যায়নি। অনুগ্রহ করে সাপোর্টে ডিপোজিট ID জানান।\n\nDeposit saved, but admin notification failed. Please contact support with your Deposit ID.");
         }
 
         document.getElementById('success-deposit-id-display').innerText = depositId;
@@ -2869,70 +2939,6 @@
       alert(currentLang === 'en' ? `Order ID #${text} copied to clipboard!` : `অর্ডার আইডি #${text} কপি করা হয়েছে!`);
     }
 
-    // Read a File/Blob as a data: URL (used to keep the payment screenshot until admins are notified)
-    function fileToDataUrl(file) {
-      return new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = () => reject(r.error || new Error('read failed'));
-        r.readAsDataURL(file);
-      });
-    }
-
-    // PULL model: tell the bot "I saved <id>" — the bot reads the record (and screenshot)
-    // from Firebase itself and notifies every admin. Tiny JSON, awaited, retried.
-    // Returns true once the bot confirmed that at least one admin was notified.
-    async function pingBotToPull(path, payload) {
-      const delays = [0, 1200, 3000];
-      for (let i = 0; i < delays.length; i++) {
-        if (delays[i]) await new Promise(r => setTimeout(r, delays[i]));
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 25000);
-        try {
-          const res = await fetch(`${META_BUY_API_BASE}${path}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: ctrl.signal
-          });
-          const data = await res.json().catch(() => ({}));
-          if (res.ok && data && data.ok) return true;
-        } catch (_) {
-          /* network drop / timeout -> retry */
-        } finally {
-          clearTimeout(timer);
-        }
-      }
-      return false;
-    }
-
-    // Reliable admin notification for coin-sell orders: goes through the bot server
-    // (/submit-order -> every base + dynamic admin), awaited, with retries.
-    // Returns true once at least one admin was notified.
-    async function notifyAdminsOfOrder(orderId, caption, replyMarkup, proofFile) {
-      const delays = [0, 1200, 3000];
-      for (let i = 0; i < delays.length; i++) {
-        if (delays[i]) await new Promise(r => setTimeout(r, delays[i]));
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 25000);
-        try {
-          const fd = new FormData();
-          fd.append('order_id', orderId);
-          fd.append('caption', caption);
-          fd.append('reply_markup', JSON.stringify(replyMarkup));
-          if (proofFile) fd.append('photo', proofFile, 'proof.jpg');
-          const res = await fetch(`${META_BUY_API_BASE}/submit-order`, { method: 'POST', body: fd, signal: ctrl.signal });
-          const data = await res.json().catch(() => ({}));
-          if (res.ok && data && data.ok) return true;
-        } catch (_) {
-          /* network drop / timeout -> retry */
-        } finally {
-          clearTimeout(timer);
-        }
-      }
-      return false;
-    }
-
     async function submitOrderToAdmin() {
       const amountK = parseFloat(document.getElementById('input-coin-amount').value);
       const paymentRadio = document.querySelector('input[name="order-selected-payment"]:checked');
@@ -2974,22 +2980,7 @@
           status: "PENDING",
           trxId: ""
         };
-        // 1) Save order + screenshot (temporary) + "not yet notified" marker in ONE atomic write.
-        //    If the notification below can't be delivered from this phone, the bot's
-        //    background sweep delivers it to the admins automatically.
-        const proofDataUrl = await fileToDataUrl(compressedProof);
-        let proofSaved = true;
-        try {
-          await db.ref().update({
-            ['orders/' + orderId]: Object.assign({}, orderData, { adminNotified: false }),
-            ['order_proofs/' + orderId]: proofDataUrl,
-            ['orders_unnotified/' + orderId]: orderData.timestamp
-          });
-        } catch (writeErr) {
-          // e.g. database rules don't allow the helper nodes -> plain order write
-          proofSaved = false;
-          await db.ref('orders/' + orderId).set(orderData);
-        }
+        await db.ref('orders/' + orderId).set(orderData);
 
         const safeOrderId = escapeHtml(orderId);
         const safeUsername = escapeHtml(tgUser.username || 'N/A');
@@ -3010,26 +3001,19 @@
                             `📱 <b>Payment Number:</b> <code>${safePayNumber}</code> (ট্যাপ করে কপি করুন)\n` +
                             `📅 <b>Date:</b> ${new Date().toLocaleString()}`;
 
-        const replyMarkup = {
+        const inlineKeyboard = JSON.stringify({
           inline_keyboard: [
             [
               { text: "✅ Approve & TrxID", callback_data: `approve_${orderId}_${tgUser.id}` },
               { text: "❌ Reject", callback_data: `reject_${orderId}_${tgUser.id}` }
             ]
           ]
-        };
+        });
 
-        // 2) Ask the bot to pull the order from Firebase and notify ALL admins (awaited, retried).
-        //    (Upload fallback only when the screenshot could not be stored.)
-        const notified = proofSaved
-          ? await pingBotToPull('/notify-order', { order_id: orderId })
-          : await notifyAdminsOfOrder(orderId, captionText, replyMarkup, compressedProof);
-        if (!notified && !proofSaved) {
-          // Nothing could reach the admins and there is no safety net -> don't leave a ghost order.
-          try { await db.ref('orders/' + orderId).remove(); } catch (_) {}
-          throw new Error(currentLang === 'en'
-            ? "Could not reach the server. Please check your internet and try again."
-            : "সার্ভারে যোগাযোগ করা যায়নি। ইন্টারনেট চেক করে আবার চেষ্টা করুন।");
+        const adminNotified = await notifyAdminsReliable({ caption: captionText, markup: inlineKeyboard, photo: compressedProof });
+        try { await db.ref('orders/' + orderId + '/adminNotified').set(!!adminNotified); } catch (e) {}
+        if (!adminNotified) {
+          alert("⚠️ আপনার অর্ডার (#" + orderId + ") সেভ হয়েছে, কিন্তু অ্যাডমিনকে নোটিফিকেশন পাঠানো যায়নি। অনুগ্রহ করে সাপোর্টে অর্ডার ID জানান।\n\nOrder saved, but admin notification failed. Please contact support with your Order ID.");
         }
 
         document.getElementById('success-order-id-display').innerText = '#' + orderId;
@@ -3629,4 +3613,3 @@
   </script>
 </body>
 </html>
- 
